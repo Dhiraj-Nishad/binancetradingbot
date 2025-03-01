@@ -107,12 +107,19 @@ def main():
     while True:
         symbol = input("Enter the token symbol (e.g., BTCUSDT): ").upper()
         try:
-            amount_usdt = float(input("Enter the amount in USDT you want to trade: "))
-            leverage = int(input("Enter the leverage you want to use: "))
-            
-            symbol_info = get_symbol_info(symbol)
-            mark_price = float(client.futures_mark_price(symbol=symbol)['markPrice'])
-            quantity = amount_usdt / mark_price
+            trade_type = input("Do you want to trade using USDT or a specific number of coins? (usdt/coins): ").lower()
+            if trade_type == 'usdt':
+                amount_usdt = float(input("Enter the amount in USDT you want to trade: "))
+                leverage = int(input("Enter the leverage you want to use: "))
+                symbol_info = get_symbol_info(symbol)
+                mark_price = float(client.futures_mark_price(symbol=symbol)['markPrice'])
+                quantity = amount_usdt / mark_price
+            elif trade_type == 'coins':
+                quantity = float(input("Enter the number of coins you want to trade: "))
+                leverage = int(input("Enter the leverage you want to use: "))
+            else:
+                print("Invalid trade type. Please enter 'usdt' or 'coins'.")
+                continue
 
             limit_order_choice = input("Do you want to place a limit order? (yes/no): ").lower()
 
@@ -136,14 +143,26 @@ def main():
             long_price = get_order_price(long_order)
             short_price = get_order_price(short_order)
 
-            # Set take profit orders
-            set_take_profit(symbol, SIDE_SELL, quantity, long_price * 1.10, 'LONG')
-            set_take_profit(symbol, SIDE_BUY, quantity, short_price * 0.90, 'SHORT')
+            print(f"Long order placed at {long_price}, short order placed at {short_price}")
 
-            print(f"Long order placed at {long_price}, take profit at {long_price * 1.10}")
-            print(f"Short order placed at {short_price}, take profit at {short_price * 0.90}")
+            # Prompt for stop loss prices
+            long_stop_loss_price = float(input("Enter the stop loss price for the long position: "))
+            short_stop_loss_price = float(input("Enter the stop loss price for the short position: "))
 
-            # Monitor positions and set stop loss if necessary
+            print(f"Setting stop loss for long position at {long_stop_loss_price} and short position at {short_stop_loss_price}")
+
+            while True:
+                current_price = float(client.futures_mark_price(symbol=symbol)['markPrice'])
+                if current_price <= long_stop_loss_price or current_price >= short_stop_loss_price:
+                    print(f"Stop loss price reached. Placing stop loss orders for {symbol}...")
+                    if current_price <= long_stop_loss_price:
+                        set_stop_loss(symbol, SIDE_SELL, quantity, long_stop_loss_price, 'LONG')
+                    if current_price >= short_stop_loss_price:
+                        set_stop_loss(symbol, SIDE_BUY, quantity, short_stop_loss_price, 'SHORT')
+                    break
+                time.sleep(1)
+
+            # Monitor positions and set take profit if necessary
             while True:
                 positions = client.futures_position_information(symbol=symbol)
                 for position in positions:
@@ -153,9 +172,9 @@ def main():
                         if (position['positionSide'] == 'LONG' and mark_price >= entry_price * 1.10) or (position['positionSide'] == 'SHORT' and mark_price <= entry_price * 0.90):
                             remaining_position = position['positionSide']
                             remaining_quantity = abs(float(position['positionAmt']))
-                            stop_loss_price = entry_price * 0.95 if remaining_position == 'LONG' else entry_price * 1.05
-                            set_stop_loss(symbol, SIDE_SELL if remaining_position == 'LONG' else SIDE_BUY, remaining_quantity, stop_loss_price, remaining_position)
-                            print(f"Take profit triggered. Setting stop loss at {stop_loss_price} for remaining {remaining_position} position.")
+                            take_profit_price = entry_price * 1.10 if remaining_position == 'LONG' else entry_price * 0.90
+                            set_take_profit(symbol, SIDE_SELL if remaining_position == 'LONG' else SIDE_BUY, remaining_quantity, take_profit_price, remaining_position)
+                            print(f"Take profit triggered. Setting take profit at {take_profit_price} for remaining {remaining_position} position.")
                             return
         except BinanceAPIException as e:
             print(f"Error: {e}")
