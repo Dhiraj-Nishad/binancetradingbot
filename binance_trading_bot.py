@@ -107,8 +107,8 @@ def main():
     while True:
         symbol = input("Enter the token symbol (e.g., BTCUSDT): ").upper()
         try:
-            leverage = 5
             amount_usdt = float(input("Enter the amount in USDT you want to trade: "))
+            leverage = int(input("Enter the leverage you want to use: "))
             
             symbol_info = get_symbol_info(symbol)
             mark_price = float(client.futures_mark_price(symbol=symbol)['markPrice'])
